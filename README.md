@@ -95,4 +95,4 @@ Personal use. Contact for commercial licensing.
 
 ---
 
-*Name inspired by [EsDeeKid](https://open.spotify.com/artist/0EyhkwP3UnwGFBy6xwKjSy) - Liverpool's masked cloud rap enigma.*
+*Name inspired by [EsDeeKid](https://open.spotify.com/artist/0EyhkwP3UnwGFBy6xwKjSy).*
