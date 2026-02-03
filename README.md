@@ -92,3 +92,7 @@ EsDimKid/
 ## License
 
 Personal use. Contact for commercial licensing.
+
+---
+
+*Name inspired by [EsDeeKid](https://www.youtube.com/watch?v=UTHLV3zYFJ4) - Chicago drill legend. RIP.*
