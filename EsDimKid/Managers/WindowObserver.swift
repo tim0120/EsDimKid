@@ -91,15 +91,8 @@ class WindowObserver: ObservableObject {
 
         setupObserver(for: app)
 
-        // Minimal debounce - just 10ms for API timing quirk
-        debounceWorkItem?.cancel()
-        let workItem = DispatchWorkItem { [weak self] in
-            Task { @MainActor in
-                self?.updateActiveWindowFrame()
-            }
-        }
-        debounceWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.01, execute: workItem)
+        // Update immediately - no debounce for app switches
+        updateActiveWindowFrame()
     }
 
     private func setupObserver(for app: NSRunningApplication) {
@@ -150,15 +143,9 @@ class WindowObserver: ObservableObject {
     }
 
     private func handleAXNotification() {
-        // Minimal debounce - just 10ms to coalesce rapid events
-        debounceWorkItem?.cancel()
-        let workItem = DispatchWorkItem { [weak self] in
-            Task { @MainActor in
-                self?.updateActiveWindowFrame()
-            }
-        }
-        debounceWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.01, execute: workItem)
+        // Update immediately for snappier response
+        // Debouncing removed - the UI can handle rapid updates
+        updateActiveWindowFrame()
     }
 
     private func removeCurrentObserver() {

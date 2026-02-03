@@ -14,14 +14,6 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Main toggle
-            Toggle("Enabled", isOn: $dimmingManager.isEnabled)
-                .toggleStyle(.switch)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-
-            Divider()
-
             // Dim controls
             VStack(alignment: .leading, spacing: 6) {
                 Toggle("Dim", isOn: Binding(
@@ -33,8 +25,9 @@ struct MenuBarView: View {
                             } else {
                                 dimmingManager.dimmingStyle = .dim
                             }
-                        } else if isBlurEnabled {
-                            dimmingManager.dimmingStyle = .blur
+                        } else {
+                            // Allow turning off dim even if blur is off
+                            dimmingManager.dimmingStyle = isBlurEnabled ? .blur : .none
                         }
                     }
                 ))
@@ -74,8 +67,9 @@ struct MenuBarView: View {
                             } else {
                                 dimmingManager.dimmingStyle = .blur
                             }
-                        } else if isDimEnabled {
-                            dimmingManager.dimmingStyle = .dim
+                        } else {
+                            // Allow turning off blur even if dim is off
+                            dimmingManager.dimmingStyle = isDimEnabled ? .dim : .none
                         }
                     }
                 ))

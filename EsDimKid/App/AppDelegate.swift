@@ -32,10 +32,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
-        // Subscribe to dimming manager state
-        DimmingManager.shared.$isEnabled
+        // Subscribe to dimming style changes (isEnabled is now derived from dimmingStyle)
+        DimmingManager.shared.$dimmingStyle
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] enabled in
+            .sink { [weak self] style in
+                let enabled = style != .none
                 if enabled {
                     self?.overlayController?.show()
                     self?.windowObserver?.startObserving()
@@ -43,6 +44,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.overlayController?.hide()
                     self?.windowObserver?.stopObserving()
                 }
+                self?.overlayController?.setDimmingStyle(style)
             }
             .store(in: &cancellables)
 
@@ -71,13 +73,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] mode in
                 self?.windowObserver?.highlightMode = mode
-            }
-            .store(in: &cancellables)
-
-        DimmingManager.shared.$dimmingStyle
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] style in
-                self?.overlayController?.setDimmingStyle(style)
             }
             .store(in: &cancellables)
 

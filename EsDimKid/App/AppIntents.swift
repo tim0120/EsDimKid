@@ -29,7 +29,10 @@ struct EnableDimmingIntent: AppIntent {
 
     func perform() async throws -> some IntentResult {
         await MainActor.run {
-            DimmingManager.shared.isEnabled = true
+            // If currently off, enable with dim style
+            if DimmingManager.shared.dimmingStyle == .none {
+                DimmingManager.shared.dimmingStyle = .dim
+            }
         }
         return .result()
     }
@@ -46,7 +49,7 @@ struct DisableDimmingIntent: AppIntent {
 
     func perform() async throws -> some IntentResult {
         await MainActor.run {
-            DimmingManager.shared.isEnabled = false
+            DimmingManager.shared.dimmingStyle = .none
         }
         return .result()
     }
@@ -232,7 +235,14 @@ struct EsDimKidFocusFilter: SetFocusFilterIntent {
 
     func perform() async throws -> some IntentResult {
         await MainActor.run {
-            DimmingManager.shared.isEnabled = dimmingEnabled
+            // Enable/disable via dimmingStyle
+            if dimmingEnabled {
+                if DimmingManager.shared.dimmingStyle == .none {
+                    DimmingManager.shared.dimmingStyle = .dim
+                }
+            } else {
+                DimmingManager.shared.dimmingStyle = .none
+            }
 
             if let intensityValue = intensity {
                 let clamped = max(0, min(100, intensityValue))

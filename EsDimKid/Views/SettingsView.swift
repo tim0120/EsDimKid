@@ -35,11 +35,9 @@ struct GeneralSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Enable dimming", isOn: $dimmingManager.isEnabled)
-
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("Intensity")
+                        Text("Dim Intensity")
                         Spacer()
                         Text("\(Int(dimmingManager.intensity * 100))%")
                             .foregroundColor(.secondary)

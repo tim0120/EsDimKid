@@ -16,12 +16,14 @@ enum HighlightMode: String, Codable, CaseIterable {
 }
 
 enum DimmingStyle: String, Codable, CaseIterable {
+    case none = "none"
     case dim = "dim"
     case blur = "blur"
     case dimAndBlur = "dimAndBlur"
 
     var displayName: String {
         switch self {
+        case .none: return "Off"
         case .dim: return "Dim Only"
         case .blur: return "Blur Only"
         case .dimAndBlur: return "Dim + Blur"

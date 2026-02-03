@@ -11,7 +11,7 @@ class HotkeyManager {
     private var hotKeyRef: EventHotKeyRef?
 
     private var isFnKeyPressed = false
-    private var wasEnabledBeforeFn = false
+    private var styleBeforeFn: DimmingStyle?
 
     var onToggle: (() -> Void)?
     var onFnKeyStateChanged: ((Bool) -> Void)?
@@ -125,14 +125,15 @@ class HotkeyManager {
 
             if fnKeyNow {
                 // fn key pressed - temporarily disable dimming
-                wasEnabledBeforeFn = DimmingManager.shared.isEnabled
-                if wasEnabledBeforeFn {
-                    DimmingManager.shared.isEnabled = false
+                if DimmingManager.shared.isEnabled {
+                    styleBeforeFn = DimmingManager.shared.dimmingStyle
+                    DimmingManager.shared.dimmingStyle = .none
                 }
             } else {
                 // fn key released - restore previous state
-                if wasEnabledBeforeFn {
-                    DimmingManager.shared.isEnabled = true
+                if let previousStyle = styleBeforeFn {
+                    DimmingManager.shared.dimmingStyle = previousStyle
+                    styleBeforeFn = nil
                 }
             }
         }

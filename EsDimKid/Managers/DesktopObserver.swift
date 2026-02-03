@@ -9,7 +9,7 @@ class DesktopObserver {
 
     @Published var isDesktopActive = false
 
-    private var wasEnabledBeforeDesktop = false
+    private var styleBeforeDesktop: DimmingStyle?
 
     private init() {
         // Observe frontmost app changes
@@ -35,17 +35,18 @@ class DesktopObserver {
         if isFinderWithNoWindows && !isDesktopActive {
             // User clicked on desktop
             isDesktopActive = true
-            wasEnabledBeforeDesktop = DimmingManager.shared.isEnabled
 
             if DimmingManager.shared.isEnabled {
-                DimmingManager.shared.isEnabled = false
+                styleBeforeDesktop = DimmingManager.shared.dimmingStyle
+                DimmingManager.shared.dimmingStyle = .none
             }
         } else if !isFinderWithNoWindows && isDesktopActive {
             // User clicked away from desktop
             isDesktopActive = false
 
-            if wasEnabledBeforeDesktop {
-                DimmingManager.shared.isEnabled = true
+            if let previousStyle = styleBeforeDesktop {
+                DimmingManager.shared.dimmingStyle = previousStyle
+                styleBeforeDesktop = nil
             }
         }
     }

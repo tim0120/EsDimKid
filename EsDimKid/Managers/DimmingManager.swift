@@ -8,8 +8,9 @@ class DimmingManager: ObservableObject {
 
     // MARK: - Published Properties
 
-    @Published var isEnabled: Bool {
-        didSet { UserDefaults.standard.set(isEnabled, forKey: SettingsKey.isEnabled.rawValue) }
+    // isEnabled is now derived from dimmingStyle - true when either dim or blur is on
+    var isEnabled: Bool {
+        dimmingStyle != .none
     }
 
     @Published var intensity: Double {
@@ -102,7 +103,6 @@ class DimmingManager: ObservableObject {
 
     private init() {
         // Load saved settings or use defaults
-        self.isEnabled = UserDefaults.standard.object(forKey: SettingsKey.isEnabled.rawValue) as? Bool ?? true
         self.intensity = UserDefaults.standard.object(forKey: SettingsKey.intensity.rawValue) as? Double ?? 0.35
         self.animationDuration = UserDefaults.standard.object(forKey: SettingsKey.animationDuration.rawValue) as? Double ?? 0.15  // Faster default
         self.fnKeyDisables = UserDefaults.standard.object(forKey: SettingsKey.fnKeyDisables.rawValue) as? Bool ?? true
@@ -141,6 +141,14 @@ class DimmingManager: ObservableObject {
             self.dimmingStyle = .dim
         }
 
+        // Migration: if old isEnabled was false, set style to none
+        if let wasEnabled = UserDefaults.standard.object(forKey: SettingsKey.isEnabled.rawValue) as? Bool,
+           !wasEnabled {
+            self.dimmingStyle = .none
+            // Clean up old key
+            UserDefaults.standard.removeObject(forKey: SettingsKey.isEnabled.rawValue)
+        }
+
         // Load blur intensity (0-1)
         self.blurRadius = UserDefaults.standard.object(forKey: SettingsKey.blurRadius.rawValue) as? Double ?? 0.5
 
@@ -177,8 +185,16 @@ class DimmingManager: ObservableObject {
 
     // MARK: - Public Methods
 
+    /// Stores the previous style so toggle() can restore it
+    private var previousStyle: DimmingStyle = .dim
+
     func toggle() {
-        isEnabled.toggle()
+        if isEnabled {
+            previousStyle = dimmingStyle
+            dimmingStyle = .none
+        } else {
+            dimmingStyle = previousStyle != .none ? previousStyle : .dim
+        }
     }
 
     func applyAppearanceSettings() {

@@ -304,8 +304,9 @@ class OverlayView: NSView {
     }
 
     private func updateBlurVisibility() {
+        // .none means everything is off
         let styleEnabled = dimmingStyle == .blur || dimmingStyle == .dimAndBlur
-        // Hide blur completely when radius is effectively 0
+        // Hide blur completely when radius is effectively 0 or style is none/dim
         let showBlur = styleEnabled && blurRadius > 0.005
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -330,11 +331,13 @@ class OverlayView: NSView {
             let path = CGMutablePath()
             // Full bounds (with rounded corners to match screen)
             path.addRoundedRect(in: bounds, cornerWidth: cornerRadius, cornerHeight: cornerRadius)
-            // Cut out active windows using even-odd
+            // Cut out active windows using even-odd (with rounded corners to match macOS windows)
+            // macOS Big Sur+ uses ~10pt for standard windows
+            let windowCornerRadius: CGFloat = 10.0
             for frame in activeWindowFrames {
                 let clippedFrame = frame.intersection(bounds)
                 if !clippedFrame.isEmpty {
-                    path.addRect(clippedFrame)
+                    path.addRoundedRect(in: clippedFrame, cornerWidth: windowCornerRadius, cornerHeight: windowCornerRadius)
                 }
             }
 
@@ -365,11 +368,13 @@ class OverlayView: NSView {
         let screenPath = CGPath(roundedRect: bounds, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
         context.addPath(screenPath)
 
-        // Cut out active windows
+        // Cut out active windows (with rounded corners to match macOS windows)
+        let windowCornerRadius: CGFloat = 10.0
         for frame in activeWindowFrames {
             let clippedFrame = frame.intersection(bounds)
             if !clippedFrame.isEmpty {
-                context.addRect(clippedFrame)
+                let roundedPath = CGPath(roundedRect: clippedFrame, cornerWidth: windowCornerRadius, cornerHeight: windowCornerRadius, transform: nil)
+                context.addPath(roundedPath)
             }
         }
 
