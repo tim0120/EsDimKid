@@ -22,8 +22,13 @@ let package = Package(
                 "Managers/OverlayWindowController.swift",
                 "Managers/HotkeyManager.swift",
                 "Managers/DesktopObserver.swift",
+                "Managers/SettingsPersistence.swift",
+                "Managers/SettingsValidation.swift",
                 "Models/Settings.swift",
                 "Utilities/PrivateAPIs.swift",
+                "Utilities/Logging.swift",
+                "Utilities/AccessibilityHelper.swift",
+                "Coordination/DimmingCoordinator.swift",
             ]
         )
     ]

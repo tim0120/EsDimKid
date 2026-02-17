@@ -5,13 +5,11 @@ import Combine
 /// to auto-reveal by disabling dimming
 @MainActor
 class DesktopObserver {
-    static let shared = DesktopObserver()
-
     @Published var isDesktopActive = false
 
-    private var styleBeforeDesktop: DimmingStyle?
+    var onDesktopActiveChanged: ((Bool) -> Void)?
 
-    private init() {
+    init() {
         // Observe frontmost app changes
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
@@ -35,19 +33,11 @@ class DesktopObserver {
         if isFinderWithNoWindows && !isDesktopActive {
             // User clicked on desktop
             isDesktopActive = true
-
-            if DimmingManager.shared.isEnabled {
-                styleBeforeDesktop = DimmingManager.shared.dimmingStyle
-                DimmingManager.shared.dimmingStyle = .none
-            }
+            onDesktopActiveChanged?(true)
         } else if !isFinderWithNoWindows && isDesktopActive {
             // User clicked away from desktop
             isDesktopActive = false
-
-            if let previousStyle = styleBeforeDesktop {
-                DimmingManager.shared.dimmingStyle = previousStyle
-                styleBeforeDesktop = nil
-            }
+            onDesktopActiveChanged?(false)
         }
     }
 

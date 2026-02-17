@@ -265,18 +265,73 @@ struct AppearanceSettingsEditor: View {
 
 struct ShortcutRecorderView: View {
     @Binding var shortcut: KeyboardShortcutConfig
+    @State private var isRecording = false
+    @State private var eventMonitor: Any?
 
     var body: some View {
         Button {
-            // TODO: Implement proper shortcut recording
+            startRecording()
         } label: {
-            Text(shortcutDisplayString)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color.secondary.opacity(0.2))
-                .cornerRadius(4)
+            HStack(spacing: 4) {
+                Text(isRecording ? "Type shortcut..." : shortcutDisplayString)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(isRecording ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.2))
+            .cornerRadius(4)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(isRecording ? Color.accentColor : Color.clear, lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
+        .onDisappear {
+            stopRecording()
+        }
+    }
+
+    private func startRecording() {
+        guard !isRecording else { return }
+        isRecording = true
+
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            // Escape cancels recording
+            if event.keyCode == 53 {
+                stopRecording()
+                return nil
+            }
+
+            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+            // Require at least one modifier (command, control, or option)
+            guard modifiers.contains(.command) || modifiers.contains(.control) || modifiers.contains(.option) else {
+                return event
+            }
+
+            // Get the key string from keycode
+            guard let keyString = ShortcutKeyMapper.keyString(from: event.keyCode) else {
+                return event
+            }
+
+            // Build modifier array in consistent order
+            var modifierStrings: [String] = []
+            if modifiers.contains(.control) { modifierStrings.append("control") }
+            if modifiers.contains(.option) { modifierStrings.append("option") }
+            if modifiers.contains(.shift) { modifierStrings.append("shift") }
+            if modifiers.contains(.command) { modifierStrings.append("command") }
+
+            shortcut = KeyboardShortcutConfig(key: keyString, modifiers: modifierStrings)
+            stopRecording()
+            return nil
+        }
+    }
+
+    private func stopRecording() {
+        isRecording = false
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
+        }
     }
 
     private var shortcutDisplayString: String {
@@ -291,7 +346,7 @@ struct ShortcutRecorderView: View {
 }
 
 struct AccessibilityStatusView: View {
-    @State private var isAccessibilityEnabled = AXIsProcessTrusted()
+    @State private var isAccessibilityEnabled = AccessibilityHelper.isAccessibilityEnabled
 
     var body: some View {
         HStack {
@@ -310,12 +365,12 @@ struct AccessibilityStatusView: View {
 
             if !isAccessibilityEnabled {
                 Button("Open Settings") {
-                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+                    AccessibilityHelper.openAccessibilitySettings()
                 }
             }
         }
         .onAppear {
-            isAccessibilityEnabled = AXIsProcessTrusted()
+            isAccessibilityEnabled = AccessibilityHelper.isAccessibilityEnabled
         }
     }
 }

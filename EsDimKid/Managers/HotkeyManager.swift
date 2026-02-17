@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import os.log
 
 /// Manages global keyboard shortcuts and fn key monitoring
 @MainActor
@@ -9,9 +10,9 @@ class HotkeyManager {
     private var eventMonitor: Any?
     private var fnKeyMonitor: Any?
     private var hotKeyRef: EventHotKeyRef?
+    private let logger = Logger.hotkey
 
     private var isFnKeyPressed = false
-    private var styleBeforeFn: DimmingStyle?
 
     var onToggle: (() -> Void)?
     var onFnKeyStateChanged: ((Bool) -> Void)?
@@ -43,7 +44,7 @@ class HotkeyManager {
 
         // Convert key to keycode
         guard let keyCode = keyCodeFor(key: key) else {
-            print("Unknown key: \(key)")
+            logger.error("Unknown key: \(key)")
             return
         }
 
@@ -82,7 +83,7 @@ class HotkeyManager {
         )
 
         if status != noErr {
-            print("Failed to register hotkey: \(status)")
+            logger.error("Failed to register hotkey: \(status)")
         }
     }
 
@@ -121,40 +122,54 @@ class HotkeyManager {
 
         if fnKeyNow != isFnKeyPressed {
             isFnKeyPressed = fnKeyNow
+            // Notify coordinator via callback - it handles the state management
             onFnKeyStateChanged?(fnKeyNow)
-
-            if fnKeyNow {
-                // fn key pressed - temporarily disable dimming
-                if DimmingManager.shared.isEnabled {
-                    styleBeforeFn = DimmingManager.shared.dimmingStyle
-                    DimmingManager.shared.dimmingStyle = .none
-                }
-            } else {
-                // fn key released - restore previous state
-                if let previousStyle = styleBeforeFn {
-                    DimmingManager.shared.dimmingStyle = previousStyle
-                    styleBeforeFn = nil
-                }
-            }
         }
     }
 
     // MARK: - Key Code Mapping
 
     nonisolated private func keyCodeFor(key: String) -> Int? {
-        let keyMap: [String: Int] = [
-            "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7,
-            "c": 8, "v": 9, "b": 11, "q": 12, "w": 13, "e": 14, "r": 15,
-            "y": 16, "t": 17, "1": 18, "2": 19, "3": 20, "4": 21, "6": 22,
-            "5": 23, "=": 24, "9": 25, "7": 26, "-": 27, "8": 28, "0": 29,
-            "]": 30, "o": 31, "u": 32, "[": 33, "i": 34, "p": 35, "l": 37,
-            "j": 38, "'": 39, "k": 40, ";": 41, "\\": 42, ",": 43, "/": 44,
-            "n": 45, "m": 46, ".": 47, "`": 50, " ": 49,
-            "return": 36, "tab": 48, "delete": 51, "escape": 53,
-            "left": 123, "right": 124, "down": 125, "up": 126,
-            "f1": 122, "f2": 120, "f3": 99, "f4": 118, "f5": 96, "f6": 97,
-            "f7": 98, "f8": 100, "f9": 101, "f10": 109, "f11": 103, "f12": 111,
-        ]
-        return keyMap[key.lowercased()]
+        ShortcutKeyMapper.keyCodeFor(key: key)
+    }
+}
+
+// MARK: - Shortcut Key Mapper
+
+enum ShortcutKeyMapper {
+    static let keycodeToKey: [UInt16: String] = [
+        0: "a", 1: "s", 2: "d", 3: "f", 4: "h", 5: "g", 6: "z", 7: "x",
+        8: "c", 9: "v", 11: "b", 12: "q", 13: "w", 14: "e", 15: "r",
+        16: "y", 17: "t", 18: "1", 19: "2", 20: "3", 21: "4", 22: "6",
+        23: "5", 24: "=", 25: "9", 26: "7", 27: "-", 28: "8", 29: "0",
+        30: "]", 31: "o", 32: "u", 33: "[", 34: "i", 35: "p", 37: "l",
+        38: "j", 39: "'", 40: "k", 41: ";", 42: "\\", 43: ",", 44: "/",
+        45: "n", 46: "m", 47: ".", 49: " ", 50: "`",
+        36: "return", 48: "tab", 51: "delete", 53: "escape",
+        123: "left", 124: "right", 125: "down", 126: "up",
+        122: "f1", 120: "f2", 99: "f3", 118: "f4", 96: "f5", 97: "f6",
+        98: "f7", 100: "f8", 101: "f9", 109: "f10", 103: "f11", 111: "f12",
+    ]
+
+    static let keyToKeycode: [String: Int] = {
+        var map: [String: Int] = [:]
+        for (code, key) in keycodeToKey {
+            map[key] = Int(code)
+        }
+        return map
+    }()
+
+    static let validKeys: Set<String> = Set(keycodeToKey.values)
+
+    static func isValidKey(_ key: String) -> Bool {
+        validKeys.contains(key.lowercased())
+    }
+
+    static func keyString(from keycode: UInt16) -> String? {
+        keycodeToKey[keycode]
+    }
+
+    static func keyCodeFor(key: String) -> Int? {
+        keyToKeycode[key.lowercased()]
     }
 }

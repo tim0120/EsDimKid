@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import Combine
+import os.log
 
 /// Observes the currently active window using the Accessibility API
 @MainActor
@@ -15,6 +16,7 @@ class WindowObserver: ObservableObject {
     private var currentApp: NSRunningApplication?
     private var isObserving = false
     private var debounceWorkItem: DispatchWorkItem?
+    private let logger = Logger.windowObserver
 
     // Notifications to observe
     private let notifications: [String] = [
@@ -25,14 +27,7 @@ class WindowObserver: ObservableObject {
         kAXWindowCreatedNotification as String,
     ]
 
-    // Store a reference for the callback - using nonisolated(unsafe) for the static dict
-    // since we only access it from MainActor contexts anyway
-    nonisolated(unsafe) private static var instances: [ObjectIdentifier: WindowObserver] = [:]
-
     init() {
-        // Store reference for callback
-        WindowObserver.instances[ObjectIdentifier(self)] = self
-
         // Observe app activation changes
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
@@ -43,10 +38,6 @@ class WindowObserver: ObservableObject {
                 self?.handleActiveAppDidChange(notification)
             }
         }
-    }
-
-    deinit {
-        WindowObserver.instances.removeValue(forKey: ObjectIdentifier(self))
     }
 
     // MARK: - Public Methods
@@ -104,23 +95,20 @@ class WindowObserver: ObservableObject {
 
         let pid = app.processIdentifier
 
-        // Create AX observer
+        // Create AX observer with proper refcon handling
         var observer: AXObserver?
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
         let result = AXObserverCreate(pid, { _, _, _, refcon in
             // This callback runs on the main thread due to run loop source
-            guard refcon != nil else { return }
-
-            // Find our WindowObserver instance and notify it
-            for (_, instance) in WindowObserver.instances {
-                Task { @MainActor in
-                    instance.handleAXNotification()
-                }
-                break
+            guard let refcon = refcon else { return }
+            let observer = Unmanaged<WindowObserver>.fromOpaque(refcon).takeUnretainedValue()
+            Task { @MainActor in
+                observer.handleAXNotification()
             }
         }, &observer)
 
         guard result == .success, let observer = observer else {
-            print("Failed to create AXObserver for pid \(pid)")
+            logger.error("Failed to create AXObserver for pid \(pid)")
             return
         }
 
@@ -131,7 +119,7 @@ class WindowObserver: ObservableObject {
 
         // Add notifications
         for notification in notifications {
-            AXObserverAddNotification(observer, appElement, notification as CFString, Unmanaged.passUnretained(self as AnyObject).toOpaque())
+            AXObserverAddNotification(observer, appElement, notification as CFString, refcon)
         }
 
         // Add observer to run loop
@@ -208,6 +196,8 @@ class WindowObserver: ObservableObject {
             return getMainWindowFrame(for: appElement)
         }
 
+        // CFTypeRef is type-erased, so we trust the AX API returns correct type
+        // swiftlint:disable:next force_cast
         return getWindowFrame(for: window as! AXUIElement)
     }
 
@@ -219,6 +209,8 @@ class WindowObserver: ObservableObject {
             return nil
         }
 
+        // CFTypeRef is type-erased, so we trust the AX API returns correct type
+        // swiftlint:disable:next force_cast
         return getWindowFrame(for: window as! AXUIElement)
     }
 
@@ -245,8 +237,16 @@ class WindowObserver: ObservableObject {
         var position = CGPoint.zero
         var size = CGSize.zero
 
-        AXValueGetValue(positionRef as! AXValue, .cgPoint, &position)
-        AXValueGetValue(sizeRef as! AXValue, .cgSize, &size)
+        // CFTypeRef is type-erased, so we trust the AX API returns correct types
+        // swiftlint:disable:next force_cast
+        let positionValue = positionRef as! AXValue
+        // swiftlint:disable:next force_cast
+        let sizeValue = sizeRef as! AXValue
+
+        guard AXValueGetValue(positionValue, .cgPoint, &position),
+              AXValueGetValue(sizeValue, .cgSize, &size) else {
+            return nil
+        }
 
         // AX coordinates have origin at top-left of main screen
         // Convert to screen coordinates (origin at bottom-left)

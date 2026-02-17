@@ -1,5 +1,20 @@
 import AppKit
 
+private enum OverlayConstants {
+    static let screenCornerRadius: CGFloat = 12.0
+    static let windowCornerRadius: CGFloat = 10.0
+    static let defaultIntensity: Double = 0.35
+    static let maxBlurRadius: Double = 30.0
+    static let blurPerformanceThreshold: Double = 0.3
+    static let reducedScale: CGFloat = 0.25
+    static let fullScale: CGFloat = 1.0
+    static let saturationMultiplier: Double = 0.8
+    static let maxBleedAmount: Double = 15.0
+    static let bleedMultiplier: Double = 0.5
+    static let blurVisibilityThreshold: Double = 0.005
+    static let defaultOverlayColor = NSColor(red: 0.05, green: 0.05, blue: 0.05, alpha: 1.0)
+}
+
 /// Manages overlay windows for dimming inactive areas of the screen.
 /// Creates one overlay window per display, handling multi-monitor setups.
 @MainActor
@@ -8,8 +23,8 @@ final class OverlayWindowController {
     var animationDuration: Double = 0.3
 
     private var isShowing = false
-    private var currentIntensity: Double = 0.35
-    private var currentColor: NSColor = NSColor(red: 0.05, green: 0.05, blue: 0.05, alpha: 1.0)  // Near black
+    private var currentIntensity: Double = OverlayConstants.defaultIntensity
+    private var currentColor: NSColor = OverlayConstants.defaultOverlayColor
     private var currentDimmingStyle: DimmingStyle = .dim
     private var currentBlurRadius: Double = 0.5
 
@@ -218,11 +233,11 @@ class OverlayWindow: NSWindow, NSWindowDelegate {
 // MARK: - OverlayView
 
 class OverlayView: NSView {
-    var intensity: Double = 0.35 {
+    var intensity: Double = OverlayConstants.defaultIntensity {
         didSet { needsDisplay = true }
     }
 
-    var color: NSColor = NSColor(red: 0.05, green: 0.05, blue: 0.05, alpha: 1.0) {
+    var color: NSColor = OverlayConstants.defaultOverlayColor {
         didSet { needsDisplay = true }
     }
 
@@ -245,7 +260,6 @@ class OverlayView: NSView {
     }
 
     private var backdropLayer: CALayer?
-    private let cornerRadius: CGFloat = 12.0
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -260,13 +274,13 @@ class OverlayView: NSView {
     private func setupView() {
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
-        layer?.cornerRadius = cornerRadius
+        layer?.cornerRadius = OverlayConstants.screenCornerRadius
         layer?.masksToBounds = true
 
         // Create backdrop layer for blur (private API)
         if let backdrop = BackdropLayerHelper.createBackdropLayer() {
             backdrop.frame = bounds
-            backdrop.cornerRadius = cornerRadius
+            backdrop.cornerRadius = OverlayConstants.screenCornerRadius
             backdropLayer = backdrop
             layer?.addSublayer(backdrop)
 
@@ -280,23 +294,27 @@ class OverlayView: NSView {
     private func updateBlurRadius() {
         guard let backdrop = backdropLayer else { return }
 
-        // Scale: 0% = 0 blur, 100% = 30 blur radius
+        // Scale: 0% = 0 blur, 100% = max blur radius
         // Using gentler curve (power of 2) for smoother low-end control
-        let radius = pow(blurRadius, 2.0) * 30.0
+        let radius = pow(blurRadius, 2.0) * OverlayConstants.maxBlurRadius
         BackdropLayerHelper.setBlurRadius(backdrop, radius: CGFloat(radius))
 
         // Scale saturation from 1.0 (no change) at 0% to 1.8 at 100%
-        let saturation = 1.0 + (blurRadius * 0.8)
+        let saturation = 1.0 + (blurRadius * OverlayConstants.saturationMultiplier)
         BackdropLayerHelper.setSaturation(backdrop, amount: CGFloat(saturation))
 
         // Dynamically adjust scale for performance at high blur levels
-        // At low blur, use full resolution (1.0) to avoid downsampling artifacts
-        // At high blur, use quarter resolution (0.25) for better performance
-        let scale: CGFloat = blurRadius > 0.3 ? 0.25 : 1.0
+        // At low blur, use full resolution to avoid downsampling artifacts
+        // At high blur, use quarter resolution for better performance
+        let scale: CGFloat = blurRadius > OverlayConstants.blurPerformanceThreshold
+            ? OverlayConstants.reducedScale
+            : OverlayConstants.fullScale
         BackdropLayerHelper.setScale(backdrop, scale: scale)
 
         // Adjust bleed amount based on blur radius
-        let bleed = radius > 0 ? min(radius * 0.5, 15.0) : 0.0
+        let bleed = radius > 0
+            ? min(radius * OverlayConstants.bleedMultiplier, OverlayConstants.maxBleedAmount)
+            : 0.0
         BackdropLayerHelper.setBleedAmount(backdrop, amount: CGFloat(bleed))
 
         // Update visibility
@@ -304,10 +322,8 @@ class OverlayView: NSView {
     }
 
     private func updateBlurVisibility() {
-        // .none means everything is off
-        let styleEnabled = dimmingStyle == .blur || dimmingStyle == .dimAndBlur
-        // Hide blur completely when radius is effectively 0 or style is none/dim
-        let showBlur = styleEnabled && blurRadius > 0.005
+        // Hide blur completely when radius is effectively 0 or style doesn't include blur
+        let showBlur = dimmingStyle.hasBlur && blurRadius > OverlayConstants.blurVisibilityThreshold
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         backdropLayer?.isHidden = !showBlur
@@ -330,14 +346,12 @@ class OverlayView: NSView {
 
             let path = CGMutablePath()
             // Full bounds (with rounded corners to match screen)
-            path.addRoundedRect(in: bounds, cornerWidth: cornerRadius, cornerHeight: cornerRadius)
+            path.addRoundedRect(in: bounds, cornerWidth: OverlayConstants.screenCornerRadius, cornerHeight: OverlayConstants.screenCornerRadius)
             // Cut out active windows using even-odd (with rounded corners to match macOS windows)
-            // macOS Big Sur+ uses ~10pt for standard windows
-            let windowCornerRadius: CGFloat = 10.0
             for frame in activeWindowFrames {
                 let clippedFrame = frame.intersection(bounds)
                 if !clippedFrame.isEmpty {
-                    path.addRoundedRect(in: clippedFrame, cornerWidth: windowCornerRadius, cornerHeight: windowCornerRadius)
+                    path.addRoundedRect(in: clippedFrame, cornerWidth: OverlayConstants.windowCornerRadius, cornerHeight: OverlayConstants.windowCornerRadius)
                 }
             }
 
@@ -355,8 +369,7 @@ class OverlayView: NSView {
         // Clear
         context.clear(bounds)
 
-        let showDim = dimmingStyle == .dim || dimmingStyle == .dimAndBlur
-        guard showDim else { return }
+        guard dimmingStyle.hasDim else { return }
 
         // Draw dim overlay with cutouts using even-odd fill
         let fillColor = color.withAlphaComponent(intensity)
@@ -365,15 +378,14 @@ class OverlayView: NSView {
         context.beginPath()
 
         // Rounded rect for screen bounds
-        let screenPath = CGPath(roundedRect: bounds, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+        let screenPath = CGPath(roundedRect: bounds, cornerWidth: OverlayConstants.screenCornerRadius, cornerHeight: OverlayConstants.screenCornerRadius, transform: nil)
         context.addPath(screenPath)
 
         // Cut out active windows (with rounded corners to match macOS windows)
-        let windowCornerRadius: CGFloat = 10.0
         for frame in activeWindowFrames {
             let clippedFrame = frame.intersection(bounds)
             if !clippedFrame.isEmpty {
-                let roundedPath = CGPath(roundedRect: clippedFrame, cornerWidth: windowCornerRadius, cornerHeight: windowCornerRadius, transform: nil)
+                let roundedPath = CGPath(roundedRect: clippedFrame, cornerWidth: OverlayConstants.windowCornerRadius, cornerHeight: OverlayConstants.windowCornerRadius, transform: nil)
                 context.addPath(roundedPath)
             }
         }

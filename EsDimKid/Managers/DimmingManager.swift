@@ -1,10 +1,14 @@
 import AppKit
 import Combine
+import os.log
 import ServiceManagement
 
 @MainActor
 class DimmingManager: ObservableObject {
     static let shared = DimmingManager()
+
+    private let persistence = SettingsPersistence.shared
+    private let logger = Logger.dimmingManager
 
     // MARK: - Published Properties
 
@@ -14,81 +18,101 @@ class DimmingManager: ObservableObject {
     }
 
     @Published var intensity: Double {
-        didSet { UserDefaults.standard.set(intensity, forKey: SettingsKey.intensity.rawValue) }
+        didSet {
+            let validated = IntensityValidator.validate(intensity)
+            if validated != intensity { intensity = validated; return }
+            persistence.savePrimitive(intensity, for: .intensity)
+        }
     }
 
     @Published var color: NSColor {
         didSet {
-            if let data = try? JSONEncoder().encode(CodableColor(nsColor: color)) {
-                UserDefaults.standard.set(data, forKey: SettingsKey.color.rawValue)
+            do {
+                try persistence.save(CodableColor(nsColor: color), for: .color)
+            } catch {
+                logger.error("Failed to save color: \(error.localizedDescription)")
             }
         }
     }
 
     @Published var animationDuration: Double {
-        didSet { UserDefaults.standard.set(animationDuration, forKey: SettingsKey.animationDuration.rawValue) }
+        didSet {
+            let validated = AnimationDurationValidator.validate(animationDuration)
+            if validated != animationDuration { animationDuration = validated; return }
+            persistence.savePrimitive(animationDuration, for: .animationDuration)
+        }
     }
 
     @Published var highlightMode: HighlightMode {
-        didSet { UserDefaults.standard.set(highlightMode.rawValue, forKey: SettingsKey.highlightMode.rawValue) }
+        didSet { persistence.savePrimitive(highlightMode.rawValue, for: .highlightMode) }
     }
 
     @Published var displayMode: DisplayMode {
-        didSet { UserDefaults.standard.set(displayMode.rawValue, forKey: SettingsKey.displayMode.rawValue) }
+        didSet { persistence.savePrimitive(displayMode.rawValue, for: .displayMode) }
     }
 
     @Published var dimmingStyle: DimmingStyle {
-        didSet { UserDefaults.standard.set(dimmingStyle.rawValue, forKey: SettingsKey.dimmingStyle.rawValue) }
+        didSet { persistence.savePrimitive(dimmingStyle.rawValue, for: .dimmingStyle) }
     }
 
     @Published var blurRadius: Double {
-        didSet { UserDefaults.standard.set(blurRadius, forKey: SettingsKey.blurRadius.rawValue) }
+        didSet {
+            let validated = BlurRadiusValidator.validate(blurRadius)
+            if validated != blurRadius { blurRadius = validated; return }
+            persistence.savePrimitive(blurRadius, for: .blurRadius)
+        }
     }
 
     @Published var fnKeyDisables: Bool {
-        didSet { UserDefaults.standard.set(fnKeyDisables, forKey: SettingsKey.fnKeyDisables.rawValue) }
+        didSet { persistence.savePrimitive(fnKeyDisables, for: .fnKeyDisables) }
     }
 
     @Published var launchAtLogin: Bool {
         didSet {
-            UserDefaults.standard.set(launchAtLogin, forKey: SettingsKey.launchAtLogin.rawValue)
+            persistence.savePrimitive(launchAtLogin, for: .launchAtLogin)
             updateLaunchAtLogin()
         }
     }
 
     @Published var excludedBundleIDs: Set<String> {
         didSet {
-            UserDefaults.standard.set(Array(excludedBundleIDs), forKey: SettingsKey.excludedBundleIDs.rawValue)
+            persistence.savePrimitive(Array(excludedBundleIDs), for: .excludedBundleIDs)
         }
     }
 
     @Published var useSeparateAppearanceSettings: Bool {
         didSet {
-            UserDefaults.standard.set(useSeparateAppearanceSettings, forKey: SettingsKey.useSeparateAppearanceSettings.rawValue)
+            persistence.savePrimitive(useSeparateAppearanceSettings, for: .useSeparateAppearanceSettings)
             applyAppearanceSettings()
         }
     }
 
     @Published var lightModeSettings: AppearanceSettings {
         didSet {
-            if let data = try? JSONEncoder().encode(lightModeSettings) {
-                UserDefaults.standard.set(data, forKey: SettingsKey.lightModeSettings.rawValue)
+            do {
+                try persistence.save(lightModeSettings, for: .lightModeSettings)
+            } catch {
+                logger.error("Failed to save light mode settings: \(error.localizedDescription)")
             }
         }
     }
 
     @Published var darkModeSettings: AppearanceSettings {
         didSet {
-            if let data = try? JSONEncoder().encode(darkModeSettings) {
-                UserDefaults.standard.set(data, forKey: SettingsKey.darkModeSettings.rawValue)
+            do {
+                try persistence.save(darkModeSettings, for: .darkModeSettings)
+            } catch {
+                logger.error("Failed to save dark mode settings: \(error.localizedDescription)")
             }
         }
     }
 
     @Published var globalShortcut: KeyboardShortcutConfig {
         didSet {
-            if let data = try? JSONEncoder().encode(globalShortcut) {
-                UserDefaults.standard.set(data, forKey: SettingsKey.globalShortcut.rawValue)
+            do {
+                try persistence.save(globalShortcut, for: .globalShortcut)
+            } catch {
+                logger.error("Failed to save global shortcut: \(error.localizedDescription)")
             }
         }
     }
@@ -102,23 +126,24 @@ class DimmingManager: ObservableObject {
     // MARK: - Initialization
 
     private init() {
+        let persistence = SettingsPersistence.shared
+
         // Load saved settings or use defaults
-        self.intensity = UserDefaults.standard.object(forKey: SettingsKey.intensity.rawValue) as? Double ?? 0.35
-        self.animationDuration = UserDefaults.standard.object(forKey: SettingsKey.animationDuration.rawValue) as? Double ?? 0.15  // Faster default
-        self.fnKeyDisables = UserDefaults.standard.object(forKey: SettingsKey.fnKeyDisables.rawValue) as? Bool ?? true
-        self.launchAtLogin = UserDefaults.standard.object(forKey: SettingsKey.launchAtLogin.rawValue) as? Bool ?? false
-        self.useSeparateAppearanceSettings = UserDefaults.standard.object(forKey: SettingsKey.useSeparateAppearanceSettings.rawValue) as? Bool ?? false
+        self.intensity = persistence.loadDouble(for: .intensity, default: 0.35)
+        self.animationDuration = persistence.loadDouble(for: .animationDuration, default: 0.15)
+        self.fnKeyDisables = persistence.loadBool(for: .fnKeyDisables, default: true)
+        self.launchAtLogin = persistence.loadBool(for: .launchAtLogin, default: false)
+        self.useSeparateAppearanceSettings = persistence.loadBool(for: .useSeparateAppearanceSettings, default: false)
 
         // Load color - default to near black
-        if let colorData = UserDefaults.standard.data(forKey: SettingsKey.color.rawValue),
-           let codableColor = try? JSONDecoder().decode(CodableColor.self, from: colorData) {
+        if let codableColor = persistence.load(CodableColor.self, for: .color) {
             self.color = codableColor.nsColor
         } else {
-            self.color = NSColor(red: 0.05, green: 0.05, blue: 0.05, alpha: 1.0)  // Near black
+            self.color = NSColor(red: 0.05, green: 0.05, blue: 0.05, alpha: 1.0)
         }
 
         // Load highlight mode
-        if let modeString = UserDefaults.standard.string(forKey: SettingsKey.highlightMode.rawValue),
+        if let modeString = persistence.loadString(for: .highlightMode),
            let mode = HighlightMode(rawValue: modeString) {
             self.highlightMode = mode
         } else {
@@ -126,7 +151,7 @@ class DimmingManager: ObservableObject {
         }
 
         // Load display mode
-        if let modeString = UserDefaults.standard.string(forKey: SettingsKey.displayMode.rawValue),
+        if let modeString = persistence.loadString(for: .displayMode),
            let mode = DisplayMode(rawValue: modeString) {
             self.displayMode = mode
         } else {
@@ -134,7 +159,7 @@ class DimmingManager: ObservableObject {
         }
 
         // Load dimming style
-        if let styleString = UserDefaults.standard.string(forKey: SettingsKey.dimmingStyle.rawValue),
+        if let styleString = persistence.loadString(for: .dimmingStyle),
            let style = DimmingStyle(rawValue: styleString) {
             self.dimmingStyle = style
         } else {
@@ -142,41 +167,36 @@ class DimmingManager: ObservableObject {
         }
 
         // Migration: if old isEnabled was false, set style to none
-        if let wasEnabled = UserDefaults.standard.object(forKey: SettingsKey.isEnabled.rawValue) as? Bool,
-           !wasEnabled {
+        if let wasEnabled = persistence.loadOptionalBool(for: .isEnabled), !wasEnabled {
             self.dimmingStyle = .none
-            // Clean up old key
-            UserDefaults.standard.removeObject(forKey: SettingsKey.isEnabled.rawValue)
+            persistence.remove(for: .isEnabled)
         }
 
         // Load blur intensity (0-1)
-        self.blurRadius = UserDefaults.standard.object(forKey: SettingsKey.blurRadius.rawValue) as? Double ?? 0.5
+        self.blurRadius = persistence.loadDouble(for: .blurRadius, default: 0.5)
 
         // Load excluded bundle IDs
-        if let bundleIDs = UserDefaults.standard.stringArray(forKey: SettingsKey.excludedBundleIDs.rawValue) {
+        if let bundleIDs = persistence.loadStringArray(for: .excludedBundleIDs) {
             self.excludedBundleIDs = Set(bundleIDs)
         } else {
             self.excludedBundleIDs = []
         }
 
         // Load appearance settings
-        if let data = UserDefaults.standard.data(forKey: SettingsKey.lightModeSettings.rawValue),
-           let settings = try? JSONDecoder().decode(AppearanceSettings.self, from: data) {
+        if let settings = persistence.load(AppearanceSettings.self, for: .lightModeSettings) {
             self.lightModeSettings = settings
         } else {
             self.lightModeSettings = AppearanceSettings(intensity: 0.35, color: .black)
         }
 
-        if let data = UserDefaults.standard.data(forKey: SettingsKey.darkModeSettings.rawValue),
-           let settings = try? JSONDecoder().decode(AppearanceSettings.self, from: data) {
+        if let settings = persistence.load(AppearanceSettings.self, for: .darkModeSettings) {
             self.darkModeSettings = settings
         } else {
             self.darkModeSettings = AppearanceSettings(intensity: 0.35, color: .black)
         }
 
         // Load global shortcut
-        if let data = UserDefaults.standard.data(forKey: SettingsKey.globalShortcut.rawValue),
-           let shortcut = try? JSONDecoder().decode(KeyboardShortcutConfig.self, from: data) {
+        if let shortcut = persistence.load(KeyboardShortcutConfig.self, for: .globalShortcut) {
             self.globalShortcut = shortcut
         } else {
             self.globalShortcut = .default
@@ -231,7 +251,7 @@ class DimmingManager: ObservableObject {
                 try SMAppService.mainApp.unregister()
             }
         } catch {
-            print("Failed to update launch at login: \(error)")
+            logger.error("Failed to update launch at login: \(error.localizedDescription)")
         }
     }
 }

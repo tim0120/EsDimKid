@@ -4,13 +4,8 @@ struct MenuBarView: View {
     @EnvironmentObject var dimmingManager: DimmingManager
     @Environment(\.openSettings) private var openSettings
 
-    private var isDimEnabled: Bool {
-        dimmingManager.dimmingStyle == .dim || dimmingManager.dimmingStyle == .dimAndBlur
-    }
-
-    private var isBlurEnabled: Bool {
-        dimmingManager.dimmingStyle == .blur || dimmingManager.dimmingStyle == .dimAndBlur
-    }
+    private var isDimEnabled: Bool { dimmingManager.dimmingStyle.hasDim }
+    private var isBlurEnabled: Bool { dimmingManager.dimmingStyle.hasBlur }
 
     var body: some View {
         VStack(spacing: 0) {

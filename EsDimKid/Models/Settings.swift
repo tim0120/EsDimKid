@@ -29,6 +29,10 @@ enum DimmingStyle: String, Codable, CaseIterable {
         case .dimAndBlur: return "Dim + Blur"
         }
     }
+
+    var hasDim: Bool { self == .dim || self == .dimAndBlur }
+    var hasBlur: Bool { self == .blur || self == .dimAndBlur }
+    var isEnabled: Bool { self != .none }
 }
 
 enum DisplayMode: String, Codable, CaseIterable {
